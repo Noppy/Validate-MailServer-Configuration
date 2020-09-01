@@ -23,7 +23,7 @@ Resources:
     Properties:
       Name: InboundRelayMailNLB
       Type: network
-      Scheme: internal
+      Scheme: internet-facing
       IpAddressType: ipv4
       Subnets: 
         - Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PublicSubnet1Id
@@ -155,7 +155,7 @@ Resources:
 
                   #relay
                 - "relayhost = ["
-                - Fn::ImportValue: MailPoC-Outbound-RelayMail-Instance-OutboundRelaymailNlbDns
+                - Fn::ImportValue: MailPoC-Batch-Instance-OutboundRelaymailNlbDns
                 - "]:587\n"
                 - !Sub |
                   EOL
@@ -220,11 +220,19 @@ Resources:
 Outputs:
   InboundRelaymailNlbDns:
     Description: DNS of NLB
+    Value: !GetAtt InboundRelayMailNLB.DNSName
+    Export:
+      Name: !Sub "${AWS::StackName}-InboundRelaymailNlbDns"
+  InboundRelaymailNlbInternalDns:
+    Description: DNS of NLB
     Value:
       Fn::Join:
         - ""
         - - inbound-relaymail.
           - Fn::ImportValue: MailPoC-PrivateHostedZone-VPC-MailPocWholeHostedZoneName
     Export:
-      Name: !Sub "${AWS::StackName}-InboundRelaymailNlbDns"
+      Name: !Sub "${AWS::StackName}-InboundRelaymailNlbInternalDns"
+  
+
+
 

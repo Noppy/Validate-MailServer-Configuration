@@ -333,6 +333,7 @@ aws --profile ${PROFILE} cloudformation create-stack \
 ### (6)-(b)共通のパラメータ設定 
 ```shell
 POSTFIX_MYNETWORK="127.0.0.1, 10.0.0.0/8"
+POSTFIX_MYNETWORK_INBOUND="${POSTFIX_MYNETWORK}, 検証時の外部クライアントのIPをCIDRで記載"
 
 KEYNAME="CHANGE_KEY_PAIR_NAME"  #環境に合わせてキーペア名を設定してください。  
 
@@ -410,13 +411,51 @@ aws --profile ${PROFILE} cloudformation create-stack \
     --template-body "file://./cfn/batch.yaml" \
     --capabilities CAPABILITY_NAMED_IAM ;
 ```
+## (9) InboundのRelayMailインスタンス作成 (CloudFormation利用)
+```shell
+CFN_STACK_PARAMETERS='
+[
+  {
+    "ParameterKey": "KeyName",
+    "ParameterValue": "'"${KEYNAME}"'"
+  },
+  {
+    "ParameterKey": "AmiId",
+    "ParameterValue": "'"${AL2_AMIID}"'"
+  },
+  {
+    "ParameterKey": "PostfixMynetwork",
+    "ParameterValue": "'"${POSTFIX_MYNETWORK_INBOUND}"'"
+  }
+]'
+aws --profile ${PROFILE} cloudformation create-stack \
+    --stack-name MailPoC-Inbound-RelayMail-Instance \
+    --parameters "${CFN_STACK_PARAMETERS}" \
+    --template-body "file://./cfn/relaymail-inbound.yaml" \
+    --capabilities CAPABILITY_NAMED_IAM ;
+```
+
+
 ## (9) テスト
 ### (9)-(a)メール送信テスト
 ```shell
 Subject="TestMail-$(date '+%Y%m%d%H%M%S')"
-SMTP="smtp=smtp://utbound-relaymail.mailpoc.local:587"
+SMTP="smtp=smtp://outbound-relaymail.mailpoc.local:587"
 From_Address="xxx"
 To_Address="nobuyuf@amazon.co.jp"
 
-echo "テストメール$(date '+%Y%m%d%H%M%S')" | mail -s $Subject -r $From_Address $To_Address
+echo "テストメール$(date '+%Y%m%d%H%M%S')" | mail -s $Subject -S $SMTP -r $From_Address $To_Address
+```
+
+### (9)-(b)メール受信テスト
+```shell
+#ローカールでのmail送信テスト用にmailコマンドをインストール
+sudo yum -y install mailx
+
+Subject="TestMail-$(date '+%Y%m%d%H%M%S')"
+SMTP="smtp=smtp://InboundRelayMailNLB-5162b54f8ed6f595.elb.ap-northeast-1.amazonaws.com:587"
+From_Address="xxx"
+To_Address="ec2-user@mailpoc.pub"
+
+echo "テストメール$(date '+%Y%m%d%H%M%S')" | mail -s $Subject -S $SMTP -r $From_Address $To_Address
 ```
