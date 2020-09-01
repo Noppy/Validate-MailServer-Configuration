@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM Role for Relay Mail
+#----------------------------------------------
+Resources:
+  #-------------------IAM Role for SSM
+  Ec2RelayMailInstanceRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      RoleName: EC2MailPoCRelayMailInstanceRole
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+  Ec2RelayMailInstanceRolePlofile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: EC2MailPoCRelayMailInstanceRole
+      Path: "/"
+      Roles:
+        - !Ref Ec2RelayMailInstanceRole
+  #---
+  Ec2BatchInstanceRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      RoleName: EC2MailPoCBatchInstanceRole
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+  Ec2BatchInstanceRolePlofile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: EC2MailPoCBatchInstanceRole
+      Path: "/"
+      Roles:
+        - !Ref Ec2BatchInstanceRole
+Outputs:
+  #---------------- IAM Role
+  Ec2RelayMailInstanceRoleArn:
+    Description: Role Arn of Ec2RelayMailInstanceRole
+    Value: !GetAtt Ec2RelayMailInstanceRole.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-Ec2RelayMailInstanceRoleArn
+  Ec2RelayMailInstanceRoleName:
+    Description: Role Name of Ec2RelayMailInstanceRole
+    Value: !Ref Ec2RelayMailInstanceRole
+    Export:
+      Name: !Sub ${AWS::StackName}-Ec2RelayMailInstanceRoleName
+  Ec2RelayMailInstanceRolePlofile:
+    Description: Ec2RelayMailInstanceRolePlofile name
+    Value: !Ref Ec2RelayMailInstanceRolePlofile
+    Export:
+      Name: !Sub ${AWS::StackName}-Ec2RelayMailInstanceRolePlofile
+  #------------------
+  Ec2BatchInstanceRoleArn:
+    Description: Role Arn of Ec2BatchInstanceRole
+    Value: !GetAtt Ec2BatchInstanceRole.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-Ec2BatchInstanceRoleArn
+  Ec2BatchInstanceRoleName:
+    Description: Role Name of Ec2BatchInstanceRole
+    Value: !Ref Ec2BatchInstanceRole
+    Export:
+      Name: !Sub ${AWS::StackName}-Ec2BatchInstanceRoleName
+  Ec2BatchInstanceRolePlofile:
+    Description: Ec2BatchInstanceRolePlofile name
+    Value: !Ref Ec2BatchInstanceRolePlofile
+    Export:
+      Name: !Sub ${AWS::StackName}-Ec2BatchInstanceRolePlofile
+  #------------------

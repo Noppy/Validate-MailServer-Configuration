@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploy transit gateway
+Parameters:
+  PoCCidr:
+    Description: CIDR Block for Mail Poc
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    Default: 10.0.0.0/8
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: Must be like 10.1.0.0/16
+Resources:
+  #------------------ TGW
+  Tgw:
+    Type: AWS::EC2::TransitGateway
+    Properties:
+      Description: "tgw for mail poc"
+      AutoAcceptSharedAttachments: enable
+      DefaultRouteTableAssociation: enable
+      DefaultRouteTablePropagation: enable
+      DnsSupport: enable
+      #MulticastSupport: disable
+      VpnEcmpSupport: enable
+  TgwAttachInternalVpc:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties: 
+      TransitGatewayId: !Ref Tgw
+      VpcId:
+        Fn::ImportValue: MailPoC-InternalVPC-VpcId
+      SubnetIds: 
+        - Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet1Id
+        - Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet2Id
+  TgwAttachDmzInboundVpc:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties: 
+      TransitGatewayId: !Ref Tgw
+      VpcId:
+        Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-VpcId
+      SubnetIds: 
+        - Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PrivateSubnet1Id
+        - Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PrivateSubnet2Id
+  TgwAttachDmzOutboundVpc:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties: 
+      TransitGatewayId: !Ref Tgw
+      VpcId:
+        Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-VpcId
+      SubnetIds: 
+        - Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet1Id
+        - Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet2Id
+  #------------------ Route for VPC
+  DmzInboundVpcPrivateSubnet1:
+    Type: AWS::EC2::Route
+    DependsOn: TgwAttachDmzInboundVpc
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PrivateSubnet1RouteTableId
+      DestinationCidrBlock: !Ref PoCCidr
+      TransitGatewayId: !Ref Tgw
+  DmzInboundVpcPrivateSubnet2:
+    Type: AWS::EC2::Route
+    DependsOn: TgwAttachDmzInboundVpc
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PrivateSubnet2RouteTableId
+      DestinationCidrBlock: !Ref PoCCidr
+      TransitGatewayId: !Ref Tgw
+  #--
+  DmzOutboundVpcPrivateSubnet1:
+    Type: AWS::EC2::Route
+    DependsOn: TgwAttachDmzOutboundVpc
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet1RouteTableId
+      DestinationCidrBlock: !Ref PoCCidr
+      TransitGatewayId: !Ref Tgw
+  DmzOutboundVpcPrivateSubnet2:
+    Type: AWS::EC2::Route
+    DependsOn: TgwAttachDmzOutboundVpc
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet2RouteTableId
+      DestinationCidrBlock: !Ref PoCCidr
+      TransitGatewayId: !Ref Tgw
+  #--
+  InternalVpcPublicSubnetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: TgwAttachInternalVpc
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: MailPoC-InternalVPC-PublicSubnetRouteTableId
+      DestinationCidrBlock: !Ref PoCCidr
+      TransitGatewayId: !Ref Tgw

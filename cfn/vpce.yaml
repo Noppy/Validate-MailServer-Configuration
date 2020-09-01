@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploy VPCE
+Parameters:
+  VpcStackName:
+    Type: String
+  VpcName:
+    Type: String
+Resources:
+  #------------------ Security Groups
+  VPCEndpointSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${VpcName}-VPCEndpointSG
+      GroupDescription: Allow HTTPS(443)
+      VpcId:
+        Fn::ImportValue: !Sub ${VpcStackName}-VpcId
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp:
+            Fn::ImportValue: !Sub ${VpcStackName}-VpcCidr
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName}-VPCEndpointSG
+  #---For System Manager and Session Manager
+  SsmEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcId: 
+        Fn::ImportValue: !Sub ${VpcStackName}-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: yes
+      SubnetIds:
+        - Fn::ImportValue: !Sub ${VpcStackName}-PrivateSubnet1Id
+        - Fn::ImportValue: !Sub ${VpcStackName}-PrivateSubnet2Id
+      SecurityGroupIds: 
+            - !Ref VPCEndpointSG
+  Ec2MessagesEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcId: 
+        Fn::ImportValue: !Sub ${VpcStackName}-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: yes
+      SubnetIds:
+        - Fn::ImportValue: !Sub ${VpcStackName}-PrivateSubnet1Id
+        - Fn::ImportValue: !Sub ${VpcStackName}-PrivateSubnet2Id
+      SecurityGroupIds: 
+            - !Ref VPCEndpointSG
+  SsmMessagesEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcId: 
+        Fn::ImportValue: !Sub ${VpcStackName}-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: yes
+      SubnetIds:
+        - Fn::ImportValue: !Sub ${VpcStackName}-PrivateSubnet1Id
+        - Fn::ImportValue: !Sub ${VpcStackName}-PrivateSubnet2Id
+      SecurityGroupIds: 
+            - !Ref VPCEndpointSG

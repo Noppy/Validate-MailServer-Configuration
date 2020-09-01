@@ -1,0 +1,130 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Relay Mail
+#----------------------------------------------
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: (required) Name of an existing EC2 key pair
+  InstanceType: 
+    Type: String 
+    Default: t2.micro 
+    ConstraintDescription : Must be a valid EC2 instance type
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: (required) AMI ID
+  PostfixMynetwork:
+    Type: String
+    Description: (required) Postfix mynetwork parameter
+#----------------------------------------------
+Resources:
+  #-------------------Outbound Relay Mail Instance
+  OutboundRelayMailLunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: OutboundRelayMailLunchTemplate
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyName
+        IamInstanceProfile:
+          Name:
+            Fn::ImportValue: MailPoC-IAM-For-Instance-Ec2RelayMailInstanceRolePlofile
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+          HttpPutResponseHopLimit: 1
+        SecurityGroupIds:
+          - Fn::ImportValue: MailPoC-SecurityGroups-OutboundRelayMailSGId
+        Monitoring:
+          Enabled: true
+        TagSpecifications:
+          -
+            ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: MailPoC-Outbound-RelayMail
+        UserData:
+          Fn::Base64: !Sub | 
+            #!/bin/bash -xe
+            yum update -y 
+            hostnamectl set-hostname batch
+
+            #AWS CLIのセットアップ
+            TOKEN=`curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+            REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone | sed -e 's/.$//')
+            aws configure set region ${!REGION}
+            aws configure set output json
+
+            #Gmail認証情報をParameter storeから取得
+            AUTH_INFO=$(aws --output text \
+              ssm get-parameter \
+                --name mail-poc-gmail-sals-info \
+                --with-decryption \
+              --query 'Parameter.Value' );
+
+            #postfix検証用セットアップ
+            yum -y install mailx #ローカールでのmail送信テスト用にmailコマンドをインストール
+
+            #Postfix設定
+            cat > /etc/postfix/main.cf << EOL
+            # Directory configurations
+            queue_directory = /var/spool/postfix
+            command_directory = /usr/sbin
+            daemon_directory = /usr/libexec/postfix
+            data_directory = /var/lib/postfix
+
+            # process and network configurations 
+            mail_owner = postfix
+            inet_interfaces = all
+            inet_protocols = ipv4
+            mynetworks = ${PostfixMynetwork}
+            mydestination = $myhostname, localhost.$mydomain, localhost
+            unknown_local_recipient_reject_code = 550
+
+            # alias configurations
+            alias_maps = hash:/etc/aliases
+            alias_database = hash:/etc/aliases
+
+            # logging configurations
+            debug_peer_level = 2
+            debugger_command =
+              PATH=/bin:/usr/bin:/usr/local/bin:/usr/X11R6/bin
+              ddd $daemon_directory/$process_name $process_id & sleep 5
+
+            # command and other configurations
+            sendmail_path = /usr/sbin/sendmail.postfix
+            newaliases_path = /usr/bin/newaliases.postfix
+            mailq_path = /usr/bin/mailq.postfix
+            setgid_group = postdrop
+            html_directory = no
+            manpage_directory = /usr/share/man
+            sample_directory = /usr/share/doc/postfix-2.10.1/samples
+            readme_directory = /usr/share/doc/postfix-2.10.1/README_FILES
+
+            # SASL for gmail configurations
+            relayhost = [smtp.gmail.com]:587
+            smtp_use_tls = yes
+            smtp_tls_CApath = /etc/pki/tls/certs/ca-bundle.crt
+            smtp_sasl_auth_enable = yes
+            smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+            smtp_sasl_tls_security_options = noanonymous
+            smtp_sasl_mechanism_filter = plain
+            EOL
+
+            # Store SASL password
+            echo ${!AUTH_INFO} > /etc/postfix/sasl_passwd
+            chmod 600 /etc/postfix/sasl_passwd
+            postmap /etc/postfix/sasl_passwd
+            rm -f /etc/postfix/sasl_passwd
+
+            # restart postfix or system
+            systemctl restart postfix
+
+  OutboundRelayMailInstance: 
+    Type: AWS::EC2::Instance 
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: OutboundRelayMailLunchTemplate
+        Version: !GetAtt OutboundRelayMailLunchTemplate.LatestVersionNumber
+      SubnetId: 
+        Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet1Id
