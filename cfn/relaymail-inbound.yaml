@@ -1,0 +1,230 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Relay Mail(Inbound)
+#----------------------------------------------
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: (required) Name of an existing EC2 key pair
+  InstanceType: 
+    Type: String 
+    Default: t2.micro 
+    ConstraintDescription : Must be a valid EC2 instance type
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: (required) AMI ID
+  PostfixMynetwork:
+    Type: String
+    Description: (required) Postfix mynetwork parameter
+#----------------------------------------------
+Resources:
+  #-------------------NLB
+  InboundRelayMailNLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: InboundRelayMailNLB
+      Type: network
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets: 
+        - Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PublicSubnet1Id
+        - Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PublicSubnet2Id
+      Tags: 
+        -
+          Key: Name
+          Value: InboundRelayMailNLB
+  InboundRelayMailNLBTarget:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: InboundRelayMailNLBTarget
+      VpcId:
+        Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-VpcId
+      Protocol: TCP
+      Port: 587
+      TargetType: instance
+      TargetGroupAttributes:
+        -
+          Key: deregistration_delay.timeout_seconds
+          Value: 30
+      HealthCheckEnabled: true
+      HealthCheckProtocol: TCP
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPort: traffic-port
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Tags: 
+        -
+          Key: Name
+          Value: InboundRelayMailNLBTarget
+  InboundRelayMailNLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref InboundRelayMailNLB
+      Protocol: TCP
+      Port: 587
+      DefaultActions:
+        -
+          Type: forward
+          TargetGroupArn: !Ref InboundRelayMailNLBTarget
+  AddNlbRecode:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId :
+        Fn::ImportValue: MailPoC-PrivateHostedZone-VPC-MailPocWholeHostedZoneId
+      Name: 
+        Fn::Join:
+          - ""
+          - - inbound-relaymail.
+            - Fn::ImportValue: MailPoC-PrivateHostedZone-VPC-MailPocWholeHostedZoneName
+      TTL: 60
+      Type: CNAME
+      ResourceRecords:
+        - !GetAtt InboundRelayMailNLB.DNSName
+  #-------------------Inbound Relay Mail Instance
+  InboundRelayMailLunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: InboundRelayMailLunchTemplate
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyName
+        IamInstanceProfile:
+          Name:
+            Fn::ImportValue: MailPoC-IAM-For-Instance-Ec2RelayMailInstanceRolePlofile
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+          HttpPutResponseHopLimit: 1
+        SecurityGroupIds:
+          - Fn::ImportValue: MailPoC-SecurityGroups-InboundRelayMailSGId
+        Monitoring:
+          Enabled: true
+        TagSpecifications:
+          -
+            ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: MailPoC-Inbound-RelayMail
+        UserData:
+          Fn::Base64:
+            Fn::Join:
+              - ""
+              - - !Sub |
+                  #!/bin/bash -xe
+                  yum update -y 
+                  hostnamectl set-hostname relaymail-inbound
+                  
+                  #検証信用にmailコマンドをインストール
+                  yum -y install mailx #ローカールでのmail送信テスト用にmailコマンドをインストール
+
+                  #Postfix設定
+                  cat > /etc/postfix/main.cf << EOL
+                  # Directory configurations
+                  queue_directory = /var/spool/postfix
+                  command_directory = /usr/sbin
+                  daemon_directory = /usr/libexec/postfix
+                  data_directory = /var/lib/postfix
+
+                  # process and network configurations 
+                  mail_owner = postfix
+                  inet_interfaces = all
+                  inet_protocols = ipv4
+                  mynetworks = ${PostfixMynetwork}
+                  mydestination = $myhostname, localhost.$mydomain, localhost
+                  unknown_local_recipient_reject_code = 550
+
+                  # alias configurations
+                  alias_maps = hash:/etc/aliases
+                  alias_database = hash:/etc/aliases
+
+                  # logging configurations
+                  debug_peer_level = 2
+                  debugger_command =
+                    PATH=/bin:/usr/bin:/usr/local/bin:/usr/X11R6/bin
+                    ddd $daemon_directory/$process_name $process_id & sleep 5
+
+                  # command and other configurations
+                  sendmail_path = /usr/sbin/sendmail.postfix
+                  newaliases_path = /usr/bin/newaliases.postfix
+                  mailq_path = /usr/bin/mailq.postfix
+                  setgid_group = postdrop
+                  html_directory = no
+                  manpage_directory = /usr/share/man
+                  sample_directory = /usr/share/doc/postfix-2.10.1/samples
+                  readme_directory = /usr/share/doc/postfix-2.10.1/README_FILES
+
+                  #relay
+                - "relayhost = ["
+                - Fn::ImportValue: MailPoC-Outbound-RelayMail-Instance-OutboundRelaymailNlbDns
+                - "]:587\n"
+                - !Sub |
+                  EOL
+
+                  # Enable Submission port(No authentication)
+                  cat > /etc/postfix/master.cf << EOL
+                  smtp      inet  n       -       n       -       -       smtpd
+                  submission inet n       -       n       -       -       smtpd
+                    -o syslog_name=postfix/submission
+                  pickup    unix  n       -       n       60      1       pickup
+                  cleanup   unix  n       -       n       -       0       cleanup
+                  qmgr      unix  n       -       n       300     1       qmgr
+                  tlsmgr    unix  -       -       n       1000?   1       tlsmgr
+                  rewrite   unix  -       -       n       -       -       trivial-rewrite
+                  bounce    unix  -       -       n       -       0       bounce
+                  defer     unix  -       -       n       -       0       bounce
+                  trace     unix  -       -       n       -       0       bounce
+                  verify    unix  -       -       n       -       1       verify
+                  flush     unix  n       -       n       1000?   0       flush
+                  proxymap  unix  -       -       n       -       -       proxymap
+                  proxywrite unix -       -       n       -       1       proxymap
+                  smtp      unix  -       -       n       -       -       smtp
+                  relay     unix  -       -       n       -       -       smtp
+                  showq     unix  n       -       n       -       -       showq
+                  error     unix  -       -       n       -       -       error
+                  retry     unix  -       -       n       -       -       error
+                  discard   unix  -       -       n       -       -       discard
+                  local     unix  -       n       n       -       -       local
+                  virtual   unix  -       n       n       -       -       virtual
+                  lmtp      unix  -       -       n       -       -       lmtp
+                  anvil     unix  -       -       n       -       1       anvil
+                  scache    unix  -       -       n       -       1       scache
+                  EOL
+
+                  # restart postfix or system
+                  systemctl restart postfix
+  InboundRelayMailASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties: 
+      AutoScalingGroupName: InboundRelayMailASG
+      MixedInstancesPolicy:
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref InboundRelayMailLunchTemplate
+            Version: !GetAtt InboundRelayMailLunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 2
+      DesiredCapacity: 1
+      VPCZoneIdentifier:
+        - Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PrivateSubnet1Id
+        - Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PrivateSubnet2Id
+      AvailabilityZones:
+        - Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PrivateSubnet1Az
+        - Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PrivateSubnet2Az
+      TargetGroupARNs:
+        - !Ref InboundRelayMailNLBTarget
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 300
+      TerminationPolicies:
+        - DEFAULT
+      NewInstancesProtectedFromScaleIn: false
+Outputs:
+  InboundRelaymailNlbDns:
+    Description: DNS of NLB
+    Value:
+      Fn::Join:
+        - ""
+        - - inbound-relaymail.
+          - Fn::ImportValue: MailPoC-PrivateHostedZone-VPC-MailPocWholeHostedZoneName
+    Export:
+      Name: !Sub "${AWS::StackName}-InboundRelaymailNlbDns"
+
