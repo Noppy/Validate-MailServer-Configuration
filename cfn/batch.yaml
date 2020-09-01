@@ -153,12 +153,6 @@ Resources:
                   manpage_directory = /usr/share/man
                   sample_directory = /usr/share/doc/postfix-2.10.1/samples
                   readme_directory = /usr/share/doc/postfix-2.10.1/README_FILES
-
-                  #relay
-                - "relayhost = ["
-                - Fn::ImportValue: MailPoC-Outbound-RelayMail-Instance-OutboundRelaymailNlbDns
-                - "]:587\n"
-                - !Sub |
                   EOL
 
                   # Enable Submission port(No authentication)
