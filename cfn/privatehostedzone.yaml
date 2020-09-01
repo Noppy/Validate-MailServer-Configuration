@@ -31,7 +31,7 @@ Outputs:
   #------------------ DNS
   MailPocWholeHostedZoneName:
     Description: Private Hosted Zone Name
-    Value: mailpoc.local.
+    Value: mailpoc.local
     Export:
       Name: !Sub ${AWS::StackName}-MailPocWholeHostedZoneName
   MailPocWholeHostedZoneId:
