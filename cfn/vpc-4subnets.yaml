@@ -414,21 +414,64 @@ Outputs:
     Value: !Ref PublicSubnet1
     Export:
       Name: !Sub "${AWS::StackName}-PublicSubnet1Id"
+  PublicSubnet1Cidr:
+    Description: Public Subnet1 CIDR in the  VPC
+    Value: !Ref PublicSubnet1Cidr
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnet1Cidr"
+  PublicSubnet1Az:
+    Description: Public Subnet1 AZ in the  VPC
+    Value: !GetAtt PublicSubnet1.AvailabilityZone
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnet1Az"
+  #--
   PublicSubnet2Id:
     Description: Public Subnet2 ID in the  VPC
     Value: !Ref PublicSubnet2
     Export:
       Name: !Sub "${AWS::StackName}-PublicSubnet2Id"
+  PublicSubnet2Cidr:
+    Description: Public Subnet2 CIDR in the  VPC
+    Value: !Ref PublicSubnet2Cidr
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnet2Cidr"
+  PublicSubnet2Az:
+    Description: Public Subnet2 AZ in the  VPC
+    Value: !GetAtt PublicSubnet2.AvailabilityZone
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnet2Az"
+  #--
   PrivateSubnet1Id:
     Description: Private Subnet1 ID in the  VPC
     Value: !Ref PrivateSubnet1
     Export:
       Name: !Sub "${AWS::StackName}-PrivateSubnet1Id"
+  PrivateSubnet1Cidr:
+    Description: Private Subnet1 CIDR in the  VPC
+    Value: !Ref PrivateSubnet1Cidr
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnet1Cidr"
+  PrivateSubnet1Az:
+    Description: Public Subnet1 AZ in the  VPC
+    Value: !GetAtt PrivateSubnet1.AvailabilityZone
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnet1Az"
+  #--
   PrivateSubnet2Id:
     Description: Private Subnet2 ID in the  VPC
     Value: !Ref PrivateSubnet2
     Export:
       Name: !Sub "${AWS::StackName}-PrivateSubnet2Id"
+  PrivateSubnet2Cidr:
+    Description: Private Subnet2 CIDR in the  VPC
+    Value: !Ref PrivateSubnet2Cidr
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnet2Cidr"
+  PrivateSubnet2Az:
+    Description: Private Subnet2 AZ in the  VPC
+    Value: !GetAtt PrivateSubnet2.AvailabilityZone
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnet2Az"
   #------------------ route tables
   PublicSubnetRouteTableId:
     Description: Route table for Public Subnet

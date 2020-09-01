@@ -17,7 +17,70 @@ Parameters:
     Description: (required) Postfix mynetwork parameter
 #----------------------------------------------
 Resources:
-  #-------------------Outbound Relay Mail Instance
+
+  #-------------------NLB
+  BatchNLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: BatchNLB
+      Type: network
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets: 
+        - Fn::ImportValue: MailPoC-InternalVPC-PrivateSubnet1Id
+        - Fn::ImportValue: MailPoC-InternalVPC-PrivateSubnet2Id
+      Tags: 
+        -
+          Key: Name
+          Value: BatchNLB
+  BatchNLBTarget:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: BatchNLBTarget
+      VpcId:
+        Fn::ImportValue: MailPoC-InternalVPC-VpcId
+      Protocol: TCP
+      Port: 587
+      TargetType: instance
+      TargetGroupAttributes:
+        -
+          Key: deregistration_delay.timeout_seconds
+          Value: 30
+      HealthCheckEnabled: true
+      HealthCheckProtocol: TCP
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPort: traffic-port
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Tags: 
+        -
+          Key: Name
+          Value: BatchNLBTarget
+  BatchNLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref BatchNLB
+      Protocol: TCP
+      Port: 587
+      DefaultActions:
+        -
+          Type: forward
+          TargetGroupArn: !Ref BatchNLBTarget
+  AddNlbRecode:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId :
+        Fn::ImportValue: MailPoC-PrivateHostedZone-VPC-MailPocWholeHostedZoneId
+      Name: 
+        Fn::Join:
+          - ""
+          - - batch.
+            - Fn::ImportValue: MailPoC-PrivateHostedZone-VPC-MailPocWholeHostedZoneName
+      TTL: 60
+      Type: CNAME
+      ResourceRecords:
+        - !GetAtt BatchNLB.DNSName
+  #-------------------Batch Instance
   BatchLunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -44,86 +107,92 @@ Resources:
               - Key: Name
                 Value: MailPoC-InternalVPC-Batch
         UserData:
-          Fn::Base64: !Sub | 
-            #!/bin/bash -xe
-            yum update -y 
-            hostnamectl set-hostname batch-mail
+          Fn::Base64:
+            Fn::Join:
+              - ""
+              - - !Sub |
+                  #!/bin/bash -xe
+                  yum update -y 
+                  hostnamectl set-hostname batch-mail
+                  
+                  #バッチでのメール送信用にmailコマンドをインストール
+                  yum -y install mailx #ローカールでのmail送信テスト用にmailコマンドをインストール
 
-            #バッチでのメール送信用にmailコマンドをインストール
-            yum -y install mailx #ローカールでのmail送信テスト用にmailコマンドをインストール
+                  #Postfix設定
+                  cat > /etc/postfix/main.cf << EOL
+                  # Directory configurations
+                  queue_directory = /var/spool/postfix
+                  command_directory = /usr/sbin
+                  daemon_directory = /usr/libexec/postfix
+                  data_directory = /var/lib/postfix
 
-            #Postfix設定
-            cat > /etc/postfix/main.cf << EOL
-            # Directory configurations
-            queue_directory = /var/spool/postfix
-            command_directory = /usr/sbin
-            daemon_directory = /usr/libexec/postfix
-            data_directory = /var/lib/postfix
+                  # process and network configurations 
+                  mail_owner = postfix
+                  inet_interfaces = all
+                  inet_protocols = ipv4
+                  mynetworks = ${PostfixMynetwork}
+                  mydestination = $myhostname, localhost.$mydomain, localhost
+                  unknown_local_recipient_reject_code = 550
 
-            # process and network configurations 
-            mail_owner = postfix
-            inet_interfaces = all
-            inet_protocols = ipv4
-            mynetworks = ${PostfixMynetwork}
-            mydestination = $myhostname, localhost.$mydomain, localhost
-            unknown_local_recipient_reject_code = 550
+                  # alias configurations
+                  alias_maps = hash:/etc/aliases
+                  alias_database = hash:/etc/aliases
 
-            # alias configurations
-            alias_maps = hash:/etc/aliases
-            alias_database = hash:/etc/aliases
+                  # logging configurations
+                  debug_peer_level = 2
+                  debugger_command =
+                    PATH=/bin:/usr/bin:/usr/local/bin:/usr/X11R6/bin
+                    ddd $daemon_directory/$process_name $process_id & sleep 5
 
-            # logging configurations
-            debug_peer_level = 2
-            debugger_command =
-              PATH=/bin:/usr/bin:/usr/local/bin:/usr/X11R6/bin
-              ddd $daemon_directory/$process_name $process_id & sleep 5
+                  # command and other configurations
+                  sendmail_path = /usr/sbin/sendmail.postfix
+                  newaliases_path = /usr/bin/newaliases.postfix
+                  mailq_path = /usr/bin/mailq.postfix
+                  setgid_group = postdrop
+                  html_directory = no
+                  manpage_directory = /usr/share/man
+                  sample_directory = /usr/share/doc/postfix-2.10.1/samples
+                  readme_directory = /usr/share/doc/postfix-2.10.1/README_FILES
 
-            # command and other configurations
-            sendmail_path = /usr/sbin/sendmail.postfix
-            newaliases_path = /usr/bin/newaliases.postfix
-            mailq_path = /usr/bin/mailq.postfix
-            setgid_group = postdrop
-            html_directory = no
-            manpage_directory = /usr/share/man
-            sample_directory = /usr/share/doc/postfix-2.10.1/samples
-            readme_directory = /usr/share/doc/postfix-2.10.1/README_FILES
+                  #relay
+                - "relayhost = [ "
+                - Fn::ImportValue: MailPoC-Outbound-RelayMail-Instance-OutboundRelaymailNlbDns
+                - " ]:587\n"
+                - !Sub |
+                  EOL
 
-            #relay
-            relayhost = [10.3.154.80]:587
-            EOL
+                  # Enable Submission port(No authentication)
+                  cat > /etc/postfix/master.cf << EOL
+                  smtp      inet  n       -       n       -       -       smtpd
+                  submission inet n       -       n       -       -       smtpd
+                    -o syslog_name=postfix/submission
+                  pickup    unix  n       -       n       60      1       pickup
+                  cleanup   unix  n       -       n       -       0       cleanup
+                  qmgr      unix  n       -       n       300     1       qmgr
+                  tlsmgr    unix  -       -       n       1000?   1       tlsmgr
+                  rewrite   unix  -       -       n       -       -       trivial-rewrite
+                  bounce    unix  -       -       n       -       0       bounce
+                  defer     unix  -       -       n       -       0       bounce
+                  trace     unix  -       -       n       -       0       bounce
+                  verify    unix  -       -       n       -       1       verify
+                  flush     unix  n       -       n       1000?   0       flush
+                  proxymap  unix  -       -       n       -       -       proxymap
+                  proxywrite unix -       -       n       -       1       proxymap
+                  smtp      unix  -       -       n       -       -       smtp
+                  relay     unix  -       -       n       -       -       smtp
+                  showq     unix  n       -       n       -       -       showq
+                  error     unix  -       -       n       -       -       error
+                  retry     unix  -       -       n       -       -       error
+                  discard   unix  -       -       n       -       -       discard
+                  local     unix  -       n       n       -       -       local
+                  virtual   unix  -       n       n       -       -       virtual
+                  lmtp      unix  -       -       n       -       -       lmtp
+                  anvil     unix  -       -       n       -       1       anvil
+                  scache    unix  -       -       n       -       1       scache
+                  EOL
 
-            # Enable Submission port(No authentication)
-            cat > /etc/postfix/master.cf << EOL
-            smtp      inet  n       -       n       -       -       smtpd
-            submission inet n       -       n       -       -       smtpd
-              -o syslog_name=postfix/submission
-            pickup    unix  n       -       n       60      1       pickup
-            cleanup   unix  n       -       n       -       0       cleanup
-            qmgr      unix  n       -       n       300     1       qmgr
-            tlsmgr    unix  -       -       n       1000?   1       tlsmgr
-            rewrite   unix  -       -       n       -       -       trivial-rewrite
-            bounce    unix  -       -       n       -       0       bounce
-            defer     unix  -       -       n       -       0       bounce
-            trace     unix  -       -       n       -       0       bounce
-            verify    unix  -       -       n       -       1       verify
-            flush     unix  n       -       n       1000?   0       flush
-            proxymap  unix  -       -       n       -       -       proxymap
-            proxywrite unix -       -       n       -       1       proxymap
-            smtp      unix  -       -       n       -       -       smtp
-            relay     unix  -       -       n       -       -       smtp
-            showq     unix  n       -       n       -       -       showq
-            error     unix  -       -       n       -       -       error
-            retry     unix  -       -       n       -       -       error
-            discard   unix  -       -       n       -       -       discard
-            local     unix  -       n       n       -       -       local
-            virtual   unix  -       n       n       -       -       virtual
-            lmtp      unix  -       -       n       -       -       lmtp
-            anvil     unix  -       -       n       -       1       anvil
-            scache    unix  -       -       n       -       1       scache
-            EOL
-
-            # restart postfix or system
-            systemctl restart postfix
+                  # restart postfix or system
+                  systemctl restart postfix
 
   BatchInstance: 
     Type: AWS::EC2::Instance 

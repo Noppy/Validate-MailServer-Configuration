@@ -1,0 +1,41 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Add Private Hosted zone
+#----------------------------------------------
+Parameters:
+  dnsname:
+    Type: String
+    Default: mailpoc.local.
+#----------------------------------------------
+Resources:
+  MailPocWholeHostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      HostedZoneConfig:
+        Comment: "Private zone for Mail poc"
+      Name: mailpoc.local.
+      VPCs:
+        -
+          VPCId:
+            Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-VpcId
+          VPCRegion: !Ref AWS::Region
+        -
+          VPCId:
+            Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-VpcId
+          VPCRegion: !Ref AWS::Region
+        -
+          VPCId:
+            Fn::ImportValue: MailPoC-InternalVPC-VpcId
+          VPCRegion: !Ref AWS::Region
+Outputs:
+  #------------------ DNS
+  MailPocWholeHostedZoneName:
+    Description: Private Hosted Zone Name
+    Value: mailpoc.local.
+    Export:
+      Name: !Sub ${AWS::StackName}-MailPocWholeHostedZoneName
+  MailPocWholeHostedZoneId:
+    Description: Private Hosted Zone ID
+    Value: !Ref MailPocWholeHostedZone
+    Export:
+      Name: !Sub ${AWS::StackName}-MailPocWholeHostedZoneId

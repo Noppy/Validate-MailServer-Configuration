@@ -50,6 +50,11 @@ Resources:
       Path: "/"
       Roles:
         - !Ref Ec2BatchInstanceRole
+  #---
+  AutoScalingSLR:
+    Type: AWS::IAM::ServiceLinkedRole
+    Properties:
+      AWSServiceName: autoscaling.amazonaws.com
 Outputs:
   #---------------- IAM Role
   Ec2RelayMailInstanceRoleArn:
@@ -84,3 +89,8 @@ Outputs:
     Export:
       Name: !Sub ${AWS::StackName}-Ec2BatchInstanceRolePlofile
   #------------------
+  AutoScalingSLRName:
+    Description: Role Arn of AutoScalingSLR
+    Value: !Ref AutoScalingSLR
+    Export:
+      Name: !Sub ${AWS::StackName}-AutoScalingSLRName

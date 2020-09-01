@@ -1,40 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Deploy Security Group
-Parameters:
-  InboundPrivateSubnet1Cidr:
-    Description: CIDR Block of Inbound Private Subnet1
-    Type: String
-    MinLength: 9
-    MaxLength: 18
-    Default: 10.0.0.0/0
-    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
-    ConstraintDescription: Must be like 10.1.0.0/16
-  InboundPrivateSubnet2Cidr:
-    Description: CIDR Block of Inbound Private Subnet2
-    Type: String
-    MinLength: 9
-    MaxLength: 18
-    Default: 10.0.0.0/0
-    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
-    ConstraintDescription: Must be like 10.1.0.0/16
-  InternalFrontSubnet1Cidr:
-    Description: CIDR Block of Inbound Private Subnet1
-    Type: String
-    MinLength: 9
-    MaxLength: 18
-    Default: 10.0.0.0/0
-    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
-    ConstraintDescription: Must be like 10.1.0.0/16
-  InternalFrontSubnet2Cidr:
-    Description: CIDR Block of Inbound Private Subnet2
-    Type: String
-    MinLength: 9
-    MaxLength: 18
-    Default: 10.0.0.0/0
-    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
-    ConstraintDescription: Must be like 10.1.0.0/16
-
-
 #-------------------------------------------------------
 Resources:
   BatchSG:
@@ -54,7 +19,8 @@ Resources:
       IpProtocol: tcp
       FromPort: 587
       ToPort: 587
-      CidrIp: !Ref InboundPrivateSubnet1Cidr
+      CidrIp:
+        Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PrivateSubnet1Cidr
   BatchSGReceivingMail2:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -62,7 +28,26 @@ Resources:
       IpProtocol: tcp
       FromPort: 587
       ToPort: 587
-      CidrIp: !Ref InboundPrivateSubnet2Cidr
+      CidrIp:
+        Fn::ImportValue: MailPoC-DMZ-Inbound-VPC-PrivateSubnet2Cidr
+  BatchSGReceivingMail3:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref BatchSG
+      IpProtocol: tcp
+      FromPort: 587
+      ToPort: 587
+      CidrIp:
+        Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet1Cidr
+  BatchSGReceivingMail4:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref BatchSG
+      IpProtocol: tcp
+      FromPort: 587
+      ToPort: 587
+      CidrIp:
+        Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet2Cidr
   #--
   InboundRelayMailSG:
     Type: AWS::EC2::SecurityGroup
@@ -108,7 +93,8 @@ Resources:
       IpProtocol: tcp
       FromPort: 587
       ToPort: 587
-      CidrIp: !Ref InternalFrontSubnet1Cidr
+      CidrIp:
+        Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet1Cidr   
   OutboundRelayMailSGReceivingMail2:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -116,7 +102,26 @@ Resources:
       IpProtocol: tcp
       FromPort: 587
       ToPort: 587
-      CidrIp: !Ref InternalFrontSubnet2Cidr
+      CidrIp:
+        Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet2Cidr
+  OutboundRelayMailSGReceivingMail3:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref OutboundRelayMailSG
+      IpProtocol: tcp
+      FromPort: 587
+      ToPort: 587
+      CidrIp:
+        Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet1Cidr
+  OutboundRelayMailSGReceivingMail4:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref OutboundRelayMailSG
+      IpProtocol: tcp
+      FromPort: 587
+      ToPort: 587
+      CidrIp:
+        Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet2Cidr
 Outputs:
   #------------------ VPC
   BatchSGId:

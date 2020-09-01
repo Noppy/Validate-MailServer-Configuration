@@ -20,7 +20,7 @@ export PROFILE=<設定したプロファイル名称を指定。デフォルト�
 export REGION=$(aws --profile ${PROFILE} configure get region)
 ```
 
-## (2)VPCの作成(CloudFormation利用)
+## (2)VPCとPrivate Zoneの作成(CloudFormation利用)
 IGWでインターネットアクセス可能で、パブリックアクセス可能なサブネットx2、プライベートなサブネットx2の合計4つのサブネットを所有するVPCを作成します。
 <img src="./Documents/Step2.png" whdth=500>
 
@@ -243,6 +243,13 @@ aws --profile ${PROFILE} cloudformation create-stack \
     --parameters "${CFN_STACK_PARAMETERS}" \
     --capabilities CAPABILITY_IAM ;
 ```
+
+### (2)-(d) Private Hosted Zone作成(CloudFormation利用)
+```shell
+aws --profile ${PROFILE} cloudformation create-stack \
+    --stack-name MailPoC-PrivateHostedZone-VPC \
+    --template-body "file://./cfn/privatehostedzone.yaml";
+```
 ## (3)TransitGateway接続(CloudFormation利用)
 ```shell
 aws --profile ${PROFILE} cloudformation create-stack \
@@ -311,70 +318,8 @@ aws --profile ${PROFILE} cloudformation create-stack \
 ```
 ## (5)SecurityGroup作成(CloudFormation利用)
 ```shell
-#CIDR情報取得(InboundVPC)
-InboundPrivateSubnet1Id=$(aws --profile ${PROFILE} --output text \
-    cloudformation describe-stacks \
-      --stack-name MailPoC-DMZ-Inbound-VPC \
-    --query 'Stacks[].Outputs[?OutputKey==`PrivateSubnet1Id`].[OutputValue]')
-
-InboundPrivateSubnet1Cidr=$(aws --profile ${PROFILE} --output text \
-    ec2 describe-subnets \
-      --subnet-ids ${InboundPrivateSubnet1Id} \
-    --query 'Subnets[].CidrBlock')
-
-InboundPrivateSubnet2Id=$(aws --profile ${PROFILE} --output text \
-    cloudformation describe-stacks \
-      --stack-name MailPoC-DMZ-Inbound-VPC \
-    --query 'Stacks[].Outputs[?OutputKey==`PrivateSubnet2Id`].[OutputValue]')
-
-InboundPrivateSubnet2Cidr=$(aws --profile ${PROFILE} --output text \
-    ec2 describe-subnets \
-      --subnet-ids ${InboundPrivateSubnet2Id} \
-    --query 'Subnets[].CidrBlock')
-#CIDR情報取得(InternalVPC)
-InternalFrontSubnet1Id=$(aws --profile ${PROFILE} --output text \
-    cloudformation describe-stacks \
-      --stack-name MailPoC-InternalVPC \
-    --query 'Stacks[].Outputs[?OutputKey==`PublicSubnet1Id`].[OutputValue]')
-
-InternalFrontSubnet1Cidr=$(aws --profile ${PROFILE} --output text \
-    ec2 describe-subnets \
-      --subnet-ids ${InternalFrontSubnet1Id} \
-    --query 'Subnets[].CidrBlock')
-
-InternalFrontSubnet2Id=$(aws --profile ${PROFILE} --output text \
-    cloudformation describe-stacks \
-      --stack-name MailPoC-InternalVPC \
-    --query 'Stacks[].Outputs[?OutputKey==`PublicSubnet2Id`].[OutputValue]')
-
-InternalFrontSubnet2Cidr=$(aws --profile ${PROFILE} --output text \
-    ec2 describe-subnets \
-      --subnet-ids ${InternalFrontSubnet2Id} \
-    --query 'Subnets[].CidrBlock')
-
-CFN_STACK_PARAMETERS='
-[
-  {
-    "ParameterKey": "InboundPrivateSubnet1Cidr",
-    "ParameterValue": "'"${InboundPrivateSubnet1Cidr}"'"
-  },
-  {
-    "ParameterKey": "InboundPrivateSubnet2Cidr",
-    "ParameterValue": "'"${InboundPrivateSubnet2Cidr}"'"
-  },
-  {
-    "ParameterKey": "InternalFrontSubnet1Cidr",
-    "ParameterValue": "'"${InternalFrontSubnet1Cidr}"'"
-  },
-  {
-    "ParameterKey": "InternalFrontSubnet2Cidr",
-    "ParameterValue": "'"${InternalFrontSubnet2Cidr}"'"
-  }
-]'
-
 aws --profile ${PROFILE} cloudformation create-stack \
     --stack-name MailPoC-SecurityGroups \
-    --parameters "${CFN_STACK_PARAMETERS}" \
     --template-body "file://./cfn/sg.yaml" ;
 ```
 ## (6) バッチ・リレーメールインスタンスの準備
@@ -480,11 +425,11 @@ aws --profile ${PROFILE} cloudformation create-stack \
     --template-body "file://./cfn/batch.yaml" \
     --capabilities CAPABILITY_NAMED_IAM ;
 ```
-
-
+## (9) テスト
+### (9)-(a)メール送信テスト
+```shell
 Subject="Hoge"
-SMTP_Server=10.3.154.80
 From_Address="xxx"
 To_Address="nobuyuf@amazon.co.jp"
 
-echo "テストメール" | mail -s $Subject -S $SMTP_Server -r $From_Address $To_Address
+echo "テストメール" | mail -s $Subject -r $From_Address $To_Address

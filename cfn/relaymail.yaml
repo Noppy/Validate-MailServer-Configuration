@@ -17,6 +17,68 @@ Parameters:
     Description: (required) Postfix mynetwork parameter
 #----------------------------------------------
 Resources:
+  #-------------------NLB
+  OutboundRelayMailNLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: OutboundRelayMailNLB
+      Type: network
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets: 
+        - Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet1Id
+        - Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet2Id
+      Tags: 
+        -
+          Key: Name
+          Value: OutboundRelayMailNLB
+  OutboundRelayMailNLBTarget:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: OutboundRelayMailNLBTarget
+      VpcId:
+        Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-VpcId
+      Protocol: TCP
+      Port: 587
+      TargetType: instance
+      TargetGroupAttributes:
+        -
+          Key: deregistration_delay.timeout_seconds
+          Value: 30
+      HealthCheckEnabled: true
+      HealthCheckProtocol: TCP
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPort: traffic-port
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Tags: 
+        -
+          Key: Name
+          Value: OutboundRelayMailNLBTarget
+  OutboundRelayMailNLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref OutboundRelayMailNLB
+      Protocol: TCP
+      Port: 587
+      DefaultActions:
+        -
+          Type: forward
+          TargetGroupArn: !Ref OutboundRelayMailNLBTarget
+  AddNlbRecode:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId :
+        Fn::ImportValue: MailPoC-PrivateHostedZone-VPC-MailPocWholeHostedZoneId
+      Name: 
+        Fn::Join:
+          - ""
+          - - outbound-relaymail.
+            - Fn::ImportValue: MailPoC-PrivateHostedZone-VPC-MailPocWholeHostedZoneName
+      TTL: 60
+      Type: CNAME
+      ResourceRecords:
+        - !GetAtt OutboundRelayMailNLB.DNSName
   #-------------------Outbound Relay Mail Instance
   OutboundRelayMailLunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -149,12 +211,39 @@ Resources:
 
             # restart postfix or system
             systemctl restart postfix
+  OutboundRelayMailASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties: 
+      AutoScalingGroupName: OutboundRelayMailASG
+      MixedInstancesPolicy:
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref OutboundRelayMailLunchTemplate
+            Version: !GetAtt OutboundRelayMailLunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 2
+      DesiredCapacity: 1
+      VPCZoneIdentifier:
+        - Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet1Id
+        - Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet2Id
+      AvailabilityZones:
+        - Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet1Az
+        - Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet2Az
+      TargetGroupARNs:
+        - !Ref OutboundRelayMailNLBTarget
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 300
+      TerminationPolicies:
+        - DEFAULT
+      NewInstancesProtectedFromScaleIn: false
+Outputs:
+  OutboundRelaymailNlbDns:
+    Description: DNS of NLB
+    Value:
+      Fn::Join:
+        - ""
+        - - outbound-relaymail.
+          - Fn::ImportValue: MailPoC-PrivateHostedZone-VPC-MailPocWholeHostedZoneName
+    Export:
+      Name: !Sub "${AWS::StackName}-OutboundRelaymailNlbDns"
 
-  OutboundRelayMailInstance: 
-    Type: AWS::EC2::Instance 
-    Properties:
-      LaunchTemplate:
-        LaunchTemplateName: OutboundRelayMailLunchTemplate
-        Version: !GetAtt OutboundRelayMailLunchTemplate.LatestVersionNumber
-      SubnetId: 
-        Fn::ImportValue: MailPoC-DMZ-Outbound-VPC-PrivateSubnet1Id
