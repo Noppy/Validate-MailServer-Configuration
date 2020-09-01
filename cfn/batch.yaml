@@ -15,6 +15,10 @@ Parameters:
   PostfixMynetwork:
     Type: String
     Description: (required) Postfix mynetwork parameter
+  PublicMailDomain:
+    Type: String
+    Default: mailpoc.pub
+
 #----------------------------------------------
 Resources:
 
@@ -131,7 +135,10 @@ Resources:
                   inet_interfaces = all
                   inet_protocols = ipv4
                   mynetworks = ${PostfixMynetwork}
-                  mydestination = $myhostname, localhost.$mydomain, localhost
+                - "mydestination = $myhostname, localhost.$mydomain, localhost, "
+                - Fn::ImportValue: MailPoC-PrivateHostedZone-VPC-MailPocWholeHostedZoneName
+                - !Sub " ,${PublicMailDomain}\n"
+                - !Sub |
                   unknown_local_recipient_reject_code = 550
 
                   # alias configurations
