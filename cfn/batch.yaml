@@ -193,12 +193,38 @@ Resources:
 
                   # restart postfix or system
                   systemctl restart postfix
-
-  BatchInstance: 
-    Type: AWS::EC2::Instance 
-    Properties:
-      LaunchTemplate:
-        LaunchTemplateName: BatchLunchTemplate
-        Version: !GetAtt BatchLunchTemplate.LatestVersionNumber
-      SubnetId: 
-        Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet1Id
+  BatchASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties: 
+      AutoScalingGroupName: BatchASG
+      MixedInstancesPolicy:
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref BatchLunchTemplate
+            Version: !GetAtt BatchLunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      VPCZoneIdentifier:
+        - Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet1Id
+        - Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet2Id
+      AvailabilityZones:
+        - Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet1Az
+        - Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet2Az
+      TargetGroupARNs:
+        - !Ref BatchNLBTarget
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 300
+      TerminationPolicies:
+        - DEFAULT
+      NewInstancesProtectedFromScaleIn: false
+Outputs:
+  OutboundRelaymailNlbDns:
+    Description: DNS of NLB
+    Value:
+      Fn::Join:
+        - ""
+        - - batch.
+          - Fn::ImportValue: MailPoC-PrivateHostedZone-VPC-MailPocWholeHostedZoneName
+    Export:
+      Name: !Sub "${AWS::StackName}-OutboundRelaymailNlbDns"
