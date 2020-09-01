@@ -383,7 +383,7 @@ CFN_STACK_PARAMETERS='
 aws --profile ${PROFILE} cloudformation create-stack \
     --stack-name MailPoC-Outbound-RelayMail-Instance \
     --parameters "${CFN_STACK_PARAMETERS}" \
-    --template-body "file://./cfn/relaymail.yaml" \
+    --template-body "file://./cfn/relaymail-outbound.yaml" \
     --capabilities CAPABILITY_NAMED_IAM ;
 ```
 
@@ -414,6 +414,7 @@ aws --profile ${PROFILE} cloudformation create-stack \
 ### (9)-(a)メール送信テスト
 ```shell
 Subject="TestMail-$(date '+%Y%m%d%H%M%S')"
+SMTP="smtp=smtp://utbound-relaymail.mailpoc.local:587"
 From_Address="xxx"
 To_Address="nobuyuf@amazon.co.jp"
 
