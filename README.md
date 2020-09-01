@@ -404,14 +404,6 @@ CFN_STACK_PARAMETERS='
     "ParameterValue": "'"${POSTFIX_MYNETWORK}"'"
   }
 ]'
-
-aws --profile ${PROFILE} cloudformation update-stack \
-    --stack-name MailPoC-Batch-Instance \
-    --parameters "${CFN_STACK_PARAMETERS}" \
-    --template-body "file://./cfn/batch.yaml" \
-    --capabilities CAPABILITY_NAMED_IAM ;
-
-
 aws --profile ${PROFILE} cloudformation create-stack \
     --stack-name MailPoC-Batch-Instance \
     --parameters "${CFN_STACK_PARAMETERS}" \

@@ -155,9 +155,9 @@ Resources:
                   readme_directory = /usr/share/doc/postfix-2.10.1/README_FILES
 
                   #relay
-                - "relayhost = [ "
+                - "relayhost = ["
                 - Fn::ImportValue: MailPoC-Outbound-RelayMail-Instance-OutboundRelaymailNlbDns
-                - " ]:587\n"
+                - "]:587\n"
                 - !Sub |
                   EOL
 
