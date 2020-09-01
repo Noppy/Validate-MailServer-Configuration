@@ -482,7 +482,7 @@ aws --profile ${PROFILE} cloudformation create-stack \
 ```
 
 
-Subject="Hoge$(date)"
+Subject="Hoge"
 SMTP_Server=10.3.154.80
 From_Address="xxx"
 To_Address="nobuyuf@amazon.co.jp"
