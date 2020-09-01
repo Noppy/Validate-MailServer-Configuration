@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Relay Mail
+Description: Relay Mail(Outbound)
 #----------------------------------------------
 Parameters:
   KeyName:
@@ -109,7 +109,7 @@ Resources:
           Fn::Base64: !Sub | 
             #!/bin/bash -xe
             yum update -y 
-            hostnamectl set-hostname relaymail
+            hostnamectl set-hostname relaymail-outbound
 
             #AWS CLIのセットアップ
             TOKEN=`curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
