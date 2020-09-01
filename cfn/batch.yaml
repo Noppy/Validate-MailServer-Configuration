@@ -27,8 +27,8 @@ Resources:
       Scheme: internal
       IpAddressType: ipv4
       Subnets: 
-        - Fn::ImportValue: MailPoC-InternalVPC-PrivateSubnet1Id
-        - Fn::ImportValue: MailPoC-InternalVPC-PrivateSubnet2Id
+        - Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet1Id
+        - Fn::ImportValue: MailPoC-InternalVPC-PublicSubnet2Id
       Tags: 
         -
           Key: Name

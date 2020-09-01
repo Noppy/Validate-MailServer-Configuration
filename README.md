@@ -413,9 +413,9 @@ aws --profile ${PROFILE} cloudformation create-stack \
 ## (9) テスト
 ### (9)-(a)メール送信テスト
 ```shell
-Subject="Hoge"
+Subject="TestMail-$(date '+%Y%m%d%H%M%S')"
 From_Address="xxx"
 To_Address="nobuyuf@amazon.co.jp"
 
-echo "テストメール" | mail -s $Subject -r $From_Address $To_Address
+echo "テストメール$(date '+%Y%m%d%H%M%S')" | mail -s $Subject -r $From_Address $To_Address
 ```
