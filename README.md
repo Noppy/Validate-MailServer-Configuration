@@ -1,6 +1,11 @@
 # Validate-MailServer-Configuration
-Validate configuration about relay mail server in DMZ.
+# 検証概要
+こちらは、DMZ用のVPCがある環境(外接環境)において、メール送受信の環境を準備しメールの送受信の動作を行う、ハンズオン手順です。構築はCloudFormationを活用しています。
 
+なお本来であれば、SMTP(TCP Port 25)を利用しインターネットと送受信する環境が望ましいですが、Port 25を利用するためにはドメイン取得やAWSへの緩和申請が必要なため、このハンズオンでは下記で代替えしています。
++ メール送信: Gmailに準備したアカウントにSubmission Portを利用しメールをリレーすることで、メール送信動作確認の代替えとしています。(要Gmailアカウント)
+* メール受信: Inboundのリレーメールに、メール送信テスト用のインスタンスのPublicアドレスをMyNetworkとして登録し、Submission Portを利用しメール送信することで、メール受信動作確認の代替えとしています。
+![リレーメール検証環境概要図](./Documents/01_MailEnvironmentOutline.png)
 
 
 
@@ -8,16 +13,62 @@ Validate configuration about relay mail server in DMZ.
 # 作成手順
 ## (1)事前設定
 ### (1)-(a) 作業環境の準備
-下記を準備します。
+下記を準備します。もしCLI実行環境がない場合は、次の(1)-(b)を参照し、Cloud9の環境を準備して実行します。
 * bashが利用可能な環境(LinuxやMacの環境)
 * aws-cliのセットアップ
 * AdministratorAccessポリシーが付与され実行可能な、aws-cliのProfileの設定
 
-### (1)-(b) CLI実行用の事前準備
+### (1)-(b) (Option) Cloud9環境準備
+Cloud9利用のためには、インターネット経由でCloud9用の絵c2インスタンスにhttpsでアクセス可能である必要があります。
+#### (i) Cloud9インスタンスの作成
++ マネージメントコンソールに、AdministratorAccess権限のあるユーザでログインします。
++ サービスから<code>AWS Cloud9</code>に移動します。
++ <code>Create environment</code>ボタンを押します。
++ Name environment
+  + NameとDescriptionに任意の情報を入れます。
++ Environment settings  *デフォルトのままでOKですが、念の為記載します。
+  + Environment type: <code>Create a new EC2 instance for environment (direct access)</code>を選択
+  + Instance type: <code>t2.micro (1 GiB RAM + 1 vCPU)</code>を選択
+  + Platform: <code>Amazon Linux</code>
++ Network settings (advanced):
+  + デフォルトでは、デフォルトVPCにデプロイされます。基本そのままにします。
++ 設定内容確認
+  + 設定内容を確認し、<code>Create environment</code>を実行。
+#### (ii) Cloud9環境のアクセスと環境の確認
+インスタンスが作成されると、下記のようなCloud9の操作画面がブラウザに表示されます。
+以後は、右下のコマンドラインで作業を行います。(画面が小さい場合はコマンドラインを上に拡大することが可能です。)
+
+![Cloud9画面](./Documents/02_cloud9.png)
+
+#### (iii) AWS CLIの実行確認 
+コマンドラインで、aws CLIが利用できることを確認します。stsコマンドで、実行に利用するセッション情報が表示できることを確認します。以下の形式でCloud9のインスタンスを作成したユーザの権限情報が表示されれば成功です。
+
+```shell
+aws sts get-caller-identity
+{
+    "UserId": "XXXXXXX:XXXXXX",
+    "Account": "999999999999",
+    "Arn": "arn:aws:sts::999999999999:XXXXXXX/XXXXXX"
+}
+```
+### (1)-(b) 環境作成用ファイルの展開
+この構築用のファイル一式を実行環境で展開します。ここではCloud9と、ローカルのbash環境の双方を記載します。
+#### (i) Cloud9の場合：ファイルのアップロードと
++ コンソールがホームディレクトリ(<code>~/environment</code>にあることを確認
++ Cloud9にて、<code>File</code> -> <code>Upload Local files...</code>を選択し、<code>Select files</code>にて、<code>CFnForMailEnvironment.zip</code>アップロードする
+#### (ii) ZIPファイルの展開
+下記コマンドで、フォルダを作成しzipファイルを展開します。
+```shell
+mkdir CFnForMailEnvironment
+cd CFnForMailEnvironment
+unzip ../CFnForMailEnvironment.zip
+```
+### (1)-(c) CLI実行用の事前準備
 これ以降のAWS-CLIで共通で利用するパラメータを環境変数で設定しておきます。
 ```shell
-export PROFILE=<設定したプロファイル名称を指定。デフォルトの場合はdefaultを設定>
+export PROFILE=default  #デフォルト以外のプロファイルの場合は、利用したいプロファイル名を指定
 export REGION=$(aws --profile ${PROFILE} configure get region)
+echo "${PROFILE}  ${REGION}"
 ```
 
 ## (2)VPCとPrivate Zoneの作成(CloudFormation利用)
