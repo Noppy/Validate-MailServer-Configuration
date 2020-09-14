@@ -71,12 +71,12 @@ export REGION=$(aws --profile ${PROFILE} configure get region)
 echo "${PROFILE}  ${REGION}"
 ```
 
-## (2)VPCとPrivate Zoneの作成(CloudFormation利用)
-IGWでインターネットアクセス可能で、パブリックアクセス可能なサブネットx2、プライベートなサブネットx2の合計4つのサブネットを所有するVPCを作成します。
-<img src="./Documents/Step2.png" whdth=500>
+## (2)VPCとPrivate ZoneとPrivateHostedzoneの作成(CloudFormation利用)
+Internal-VPC、Inbound-VPC、Outbound-VPCの３つのVPCと、VPC内で利用するDNSのゾーン(Private Hosted Zone)を作成します。
+なお、CloudFormationの進捗状況は、別途マネージメントコンソールの画面をだしCloudFormationのスタックを表示するとわかりやすいです。
+<img src="./Documents/10_CreateVPC.png" whdth=500>
 
 ### (2)-(a) Internal-VPC作成
-ダウンロードしたテンプレートを利用し、VPCをデプロイします。
 ```shell
 CFN_STACK_PARAMETERS='
 [
@@ -302,12 +302,14 @@ aws --profile ${PROFILE} cloudformation create-stack \
     --template-body "file://./cfn/privatehostedzone.yaml";
 ```
 ## (3)TransitGateway接続(CloudFormation利用)
+![TransitGateway](./Documents/13_TGW.png)
 ```shell
 aws --profile ${PROFILE} cloudformation create-stack \
     --stack-name MailPoC-DMZ-TGW \
     --template-body "file://./cfn/tgw.yaml" ;
 ```
 ## (4)VPCE作成(CloudFormation利用)
+![TransitGateway](./Documents/14_VPCE.png)
 ### (4)-(a) VPCE(PrivateLink)
 ```shell
 # Internal-VPCへのVPCE作成
@@ -368,12 +370,14 @@ aws --profile ${PROFILE} cloudformation create-stack \
     --template-body "file://./cfn/vpce_s3.yaml" ;
 ```
 ## (5)SecurityGroup作成(CloudFormation利用)
+EC2インスタンスに適用するSecurityGroupを作成します。
 ```shell
 aws --profile ${PROFILE} cloudformation create-stack \
     --stack-name MailPoC-SecurityGroups \
     --template-body "file://./cfn/sg.yaml" ;
 ```
 ## (6) バッチ・リレーメールインスタンスの準備
+バッチ用インスタンス、およびリレーメール用インスタンスの共通設定を行います。
 ### (6)-(a) インスタンスロール作成 (CloudFormation利用)
 ```shell
 aws --profile ${PROFILE} cloudformation create-stack \
@@ -382,9 +386,11 @@ aws --profile ${PROFILE} cloudformation create-stack \
     --capabilities CAPABILITY_NAMED_IAM ;
 ```
 ### (6)-(b)共通のパラメータ設定 
+ここで必ず、検証で外部からSubmissionPortにメール送信する時に利用する環境のパブリックIPを<code>NETWORK_FOR_SEMD_MAIL</code>に指定してください。また、利用するキーペアを<code>KEYNAME</code>に設定して下さい。
 ```shell
+NETWORK_FOR_SEMD_MAIL="<<検証時の外部クライアントのIPをCIDRで記載>>"
 POSTFIX_MYNETWORK="127.0.0.1, 10.0.0.0/8"
-POSTFIX_MYNETWORK_INBOUND="${POSTFIX_MYNETWORK}, 検証時の外部クライアントのIPをCIDRで記載"
+POSTFIX_MYNETWORK_INBOUND="${POSTFIX_MYNETWORK},${NETWORK_FOR_SEMD_MAIL}"
 
 KEYNAME="CHANGE_KEY_PAIR_NAME"  #環境に合わせてキーペア名を設定してください。  
 
@@ -395,11 +401,12 @@ AL2_AMIID=$(aws --profile ${PROFILE} --output text \
         --filters 'Name=name,Values=amzn2-ami-hvm-2.0.????????.?-x86_64-gp2' \
                   'Name=state,Values=available' \
         --query 'reverse(sort_by(Images, &CreationDate))[:1].ImageId' ) ;
-echo -e "KEYNAME=${KEYNAME}\nAL2_AMIID=${AL2_AMIID}"
+echo -e "POSTFIX_MYNETWORK_INBOUND=${POSTFIX_MYNETWORK_INBOUND}\nKEYNAME=${KEYNAME}\nAL2_AMIID=${AL2_AMIID}"
 ```
 ## (7)リレーメールインスタンス
 ### (6)-(a) (Option)Gmail接続用のパスワードのStore
-検証でGmailに接続するためのユーザIDとパスワードを安全に管理するため、System ManagerのParameter storeに格納します。
+検証でGmailに接続するためのユーザIDとパスワードを安全に管理するため、System ManagerのParameter storeに格納します。<code>GMAIL_SASL_INFO</code>にPostfixで定義する形式でGmailの認証情報を設定します。Gmailの認証はユーザとパスワードですが、パスワードはアプリケーション用のパスワードをgoogleで払い出して設定するようにします。
+![SSM Parameter Store](./Documents/16_SSM_ParameterStore.png)
 ```shell
 # GMAILの接続用の認証情報の設定
 # username@gmail:passwordに、アカウント名とgoogleで払い出したアプリパスワードを設定します。
@@ -415,6 +422,7 @@ aws --profile ${PROFILE} \
 ```
 
 ### (7)-(b) OutboundのRelayMailインスタンス作成 (CloudFormation利用)
+![SSM Parameter Store](./Documents/17_OutboundInstance.png)
 ```shell
 CFN_STACK_PARAMETERS='
 [
@@ -440,6 +448,7 @@ aws --profile ${PROFILE} cloudformation create-stack \
 ```
 
 ## (8) バッチインスタンス作成(CloudFormation利用)
+![SSM Parameter Store](./Documents/18_BatchInstance.png)
 ```shell
 CFN_STACK_PARAMETERS='
 [
@@ -463,6 +472,7 @@ aws --profile ${PROFILE} cloudformation create-stack \
     --capabilities CAPABILITY_NAMED_IAM ;
 ```
 ## (9) InboundのRelayMailインスタンス作成 (CloudFormation利用)
+![SSM Parameter Store](./Documents/19_InboundInstance.png)
 ```shell
 CFN_STACK_PARAMETERS='
 [
@@ -487,26 +497,55 @@ aws --profile ${PROFILE} cloudformation create-stack \
 ```
 
 
-## (9) テスト
-### (9)-(a)メール送信テスト
+## (10) テスト
+### (10)-(a)メール送信テスト
+バッチインスタンスにSystems Manager Session Managerでアクセスし、メール送信のテストをします。
+#### (i)Systems Manager Session Managerによるバッチインスタンスアクセス
++ マネージメントコンソールで、Systems Managerのサービスを開く
++ 左側のナビゲーションペインから<code>セッションマネージャー</code>を開く
++ <code>セッションを開始する</code>をクリックし、次の画面でリストから<code>MailPoC-InternalVPC-Batch</code>を選び、右上の<code>セッションを開始する</code>
+#### (ii)コマンドによるメール送信
 ```shell
+sudo -i -u ec2-user
+To_Address="xxxxxx@xxxxxxx.com" #Gmailからのメール受信が可能なアドレスに変更する
+
 Subject="TestMail-$(date '+%Y%m%d%H%M%S')"
 SMTP="smtp=smtp://outbound-relaymail.mailpoc.local:587"
 From_Address="xxx"
-To_Address="nobuyuf@amazon.co.jp"
+
 
 echo "テストメール$(date '+%Y%m%d%H%M%S')" | mail -s $Subject -S $SMTP -r $From_Address $To_Address
 ```
 
-### (9)-(b)メール受信テスト
+### (10)-(b)メール受信テスト
+#### (i) Cloud9(構築実行環境)からのメール送信
 ```shell
 #ローカールでのmail送信テスト用にmailコマンドをインストール
 sudo yum -y install mailx
 
+#InboundのNLBのURLを取得
+NLB_DNS=$(aws --profile ${PROFILE} --output text \
+    cloudformation describe-stacks \
+        --stack-name MailPoC-Inbound-RelayMail-Instance \
+        --query 'Stacks[].Outputs[?OutputKey==`InboundRelaymailNlbDns`].[OutputValue]')
+
+echo -e "NLB_DNS= $NLB_DNS"
+
+
+#メール送信
 Subject="TestMail-$(date '+%Y%m%d%H%M%S')"
-SMTP="smtp=smtp://InboundRelayMailNLB-5162b54f8ed6f595.elb.ap-northeast-1.amazonaws.com:587"
+SMTP="smtp=smtp://${NLB_DNS}:587"
 From_Address="xxx"
 To_Address="ec2-user@mailpoc.pub"
 
 echo "テストメール$(date '+%Y%m%d%H%M%S')" | mail -s $Subject -S $SMTP -r $From_Address $To_Address
+```
+#### (ii)バッチインスタンスでのメール受信確認
+ec2-userにて、mailコマンドを実行しメールが受信されていることを確認します。
+```shell
+mail
+Heirloom Mail version 12.5 7/5/10.  Type ? for help.
+"/var/spool/mail/ec2-user": 1 message 1 new
+>N  1 xxx                   Mon Sep 14 11:24  21/968   "TestMail-20200914112456"
+&
 ```
